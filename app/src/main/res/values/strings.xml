@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Source.Python</string>
+    <string name="title_activity_login">Sign in</string>
+    <string name="title_activity_main">Source.Python forums</string>
+
+    <!-- Strings related to login -->
+    <string name="prompt_username">Username</string>
+    <string name="prompt_password">Password</string>
+    <string name="action_sign_in">Sign in or register</string>
+    <string name="action_sign_in_short">Sign in</string>
+
+    <string name="progress_please_wait">Please wait...</string>
+    <string name="progress_logging_in">Logging in...</string>
+    <string name="progress_checking_session">Checking session...</string>
+    <string name="progress_logging_out">Logging out...</string>
+
+    <string name="error_invalid_username">This username is invalid</string>
+    <string name="error_incorrect_password">This password is incorrect</string>
+    <string name="error_field_required">This field is required</string>
+    <string name="error_no_internet_connection">Error: You don\'t have an active internet connection.</string>
+
+
+    <string name="hello_world">Hello world!</string>
+    <string name="action_logout">Logout</string>
+</resources>
