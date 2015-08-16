@@ -3,6 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:context="apps.backraw.sourcepython.MainActivity">
 
-    <item android:id="@+id/action_logout" android:title="@string/action_logout"
+    <item android:id="@+id/action_login" android:title="Login"
         android:orderInCategory="100" app:showAsAction="never" />
+
+    <item android:id="@+id/action_logout" android:title="@string/action_logout"
+        android:orderInCategory="101" app:showAsAction="never" android:enabled="false" />
 </menu>

@@ -12,6 +12,7 @@
 
     <string name="progress_please_wait">Please wait...</string>
     <string name="progress_logging_in">Logging in...</string>
+    <string name="progress_loading_forums">Loading forums...</string>
     <string name="progress_checking_session">Checking session...</string>
     <string name="progress_logging_out">Logging out...</string>
 

@@ -3,7 +3,7 @@
  * http://forums.sourcepython.com
  */
 
-package apps.backraw.sourcepython.network;
+package apps.backraw.sourcepython;
 
 
 // ==================================================
@@ -11,8 +11,8 @@ package apps.backraw.sourcepython.network;
 // ==================================================
 // Android Imports
 import android.app.Activity;
-import android.app.ProgressDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
@@ -35,10 +35,6 @@ import com.loopj.android.http.RequestParams;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 
-// Project Imports
-import apps.backraw.sourcepython.MainActivity;
-import apps.backraw.sourcepython.R;
-
 
 // This class handles logging in to http://forums.sourcepython.com using LoopJ's HTTP Client.
 public class LoginActivity extends Activity {
@@ -51,7 +47,7 @@ public class LoginActivity extends Activity {
     private EditText mUsernameView;
     private EditText mPasswordView;
     private TextView mErrorView;
-    private ProgressDialog mProgressDialog;
+    private SpProgressDialog mLoginProgress;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,7 +59,7 @@ public class LoginActivity extends Activity {
         setContentView(R.layout.activity_login);
 
         // We don't need any progress dialog right now
-        mProgressDialog = null;
+        mLoginProgress = new SpProgressDialog(this, R.string.progress_logging_in);
 
         // Reference UI elements
         mUsernameView = (EditText) findViewById(R.id.username);
@@ -79,25 +75,6 @@ public class LoginActivity extends Activity {
                 attemptLogin();
             }
         });
-    }
-
-    // TODO: need to change this...
-    public void showProgress(boolean state) {
-
-        if (state) {
-            if (mProgressDialog != null) {
-                mProgressDialog.dismiss();
-            }
-
-            mProgressDialog = ProgressDialog.show(
-                    this,
-                    getString(R.string.progress_please_wait),
-                    getString(R.string.progress_logging_in),
-                    true
-            );
-        } else if (mProgressDialog != null) {
-            mProgressDialog.dismiss();
-        }
     }
 
     public void attemptLogin() {
@@ -155,7 +132,7 @@ public class LoginActivity extends Activity {
         client.setCookieStore(store);
 
         // Show the progress dialog 'Logging in...'
-        showProgress(true);
+        mLoginProgress.show();
 
         // Handle a GET request to http://forums.sourcepython.com
         client.get(FORUMS_HOME, new AsyncHttpResponseHandler() {
@@ -171,18 +148,27 @@ public class LoginActivity extends Activity {
                     public void onSuccess(int statusCode, Header[] headers, byte[] responseBody) {
 
                         // If successful, dismiss the dialog
-                        showProgress(false);
+                        mLoginProgress.dismiss();
 
                         // Soup the response's body
                         Document document = Jsoup.parse(new String(responseBody));
 
                         // Are there any links to 'register.php'?
                         if (document.select("a[href=register.php]").size() > 0) {
-                            // If yes, set an error text to notify the user
-                            mErrorView.setText("Wrong Username/Password?");
 
+                            // If yes, set an error text to notify the user
+                            mErrorView.setText("Wrong Credentials?");
                         } else {
-                            // If not, start MainActivity - credentials are correct.
+
+                            // If no, login was successful
+                            // Save credentials
+                            SharedPreferences.Editor editor =
+                                    getSharedPreferences("SP_CREDS", MODE_PRIVATE).edit();
+
+                            editor.putString("username", mUsernameView.getText().toString());
+                            editor.putString("password", mPasswordView.getText().toString());
+                            editor.apply();
+
                             Intent intent = new Intent(LoginActivity.this, MainActivity.class);
                             startActivity(intent);
                         }
@@ -192,7 +178,7 @@ public class LoginActivity extends Activity {
                     public void onFailure(int statusCode, Header[] headers, byte[] responseBody,
                                           Throwable error) {
                         // If the POST request failed, dismiss the dialog
-                        showProgress(false);
+                        mLoginProgress.dismiss();
 
                         // And log the error message
                         Log.d("LoginErrorP", error.getMessage());
@@ -204,7 +190,7 @@ public class LoginActivity extends Activity {
             public void onFailure(int statusCode, Header[] headers, byte[] responseBody,
                                   Throwable error) {
                 // If the GET request failed, dismiss the dialog
-                showProgress(false);
+                mLoginProgress.dismiss();
 
                 // Is the status code 0?
                 if (statusCode == 0) {

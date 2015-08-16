@@ -5,7 +5,7 @@
     android:paddingLeft="@dimen/activity_horizontal_margin"
     android:paddingRight="@dimen/activity_horizontal_margin"
     android:paddingTop="@dimen/activity_vertical_margin"
-    tools:context="apps.backraw.sourcepython.network.LoginActivity">
+    tools:context="apps.backraw.sourcepython.LoginActivity" >
 
     <!-- Login progress -->
     <EditText android:id="@+id/username" android:layout_width="match_parent"

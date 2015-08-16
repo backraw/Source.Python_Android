@@ -11,27 +11,23 @@ package apps.backraw.sourcepython;
 // ==================================================
 // Java Imports
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 // Android Imports
-import android.app.ProgressDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
-import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.Toast;
 
 // Apache Imports
 import org.apache.http.Header;
-import org.apache.http.cookie.Cookie;
 
 // Library Imports
 //   LoopJ's HTTP Client
@@ -49,7 +45,6 @@ import org.jsoup.select.Elements;
 // Project Imports
 import apps.backraw.sourcepython.forums.ForumFragment;
 import apps.backraw.sourcepython.forums.ForumsContent;
-import apps.backraw.sourcepython.network.LoginActivity;
 
 
 // This class converts the forums into a ViewPager and its fragments
@@ -64,9 +59,11 @@ public class MainActivity extends AppCompatActivity implements
     private PersistentCookieStore mCookieStore;
 
     // UI references
-    private ProgressDialog mProgressDialog;
+    private SpProgressDialog mProgressLoadingForums;
+    private SpProgressDialog mProgressLogout;
+
     private ViewPager mPager;
-    private PagerAdapter mPagerAdapter;
+    private Menu mMenu;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,180 +77,189 @@ public class MainActivity extends AppCompatActivity implements
         // Get the app's cookie store
         mCookieStore = new PersistentCookieStore(this);
 
-        // Get its actual cookies
-        List<Cookie> cookies = mCookieStore.getCookies();
+        // We don't need any dialogs right now
+        mProgressLoadingForums = new SpProgressDialog(this, R.string.progress_loading_forums);
+        mProgressLogout = new SpProgressDialog(this, R.string.progress_logging_out);
 
-        // Are any saved?
-        if (cookies.size() < 1) {
-            // If not, start LoginActivity
-            Intent intent = new Intent(MainActivity.this, LoginActivity.class);
-            startActivity(intent);
+        // Reference the ViewPager
+        mPager = (ViewPager) findViewById(R.id.pager);
 
-        } else {
-            // If yes, go on initialising...
+        // Create an asynchronous HTTP client
+        final AsyncHttpClient client = new AsyncHttpClient();
 
-            // We don't need any dialog right now
-            mProgressDialog = null;
+        // Make it use the cookie store
+        client.setCookieStore(mCookieStore);
 
-            // Reference the ViewPager
-            mPager = (ViewPager) findViewById(R.id.pager);
+        // Show the progress dialog 'Loading forums...'
+        mProgressLoadingForums.show();
 
-            // Create a new ForumsAdapter object
-            mPagerAdapter = new ForumsAdapter(getSupportFragmentManager());
+        // GET request to http://forums.sourcepython.com
+        client.get(FORUMS_HOME, new AsyncHttpResponseHandler() {
 
-            // Create an asynchronous HTTP client
-            final AsyncHttpClient client = new AsyncHttpClient();
+            @Override
+            public void onSuccess(int statusCode, Header[] headers, byte[] responseBody) {
 
-            // Make it use the cookie store
-            client.setCookieStore(mCookieStore);
+                // Create a temporary ArrayList object to hold ForumItem objects
+                ArrayList<ForumsContent.ForumItem> forumItems;
 
-            // Show the progress dialog 'Checking session...'
-            showProgress(true, R.string.progress_checking_session);
+                // Parse the response's body
+                Document document = Jsoup.parse(new String(responseBody));
 
-            // GET request to http://forums.sourcepython.com
-            client.get(FORUMS_HOME, new AsyncHttpResponseHandler() {
+                // Filter out the forums: Title => (Title => URL) map
+                Elements forums = document.select("ol#forums").select("li");
 
-                @Override
-                public void onSuccess(int statusCode, Header[] headers, byte[] responseBody) {
+                // Loop through all forums
+                // (General, User Content and Development, Source.Python Development)
+                for (Element section : forums) {
 
-                    // Parse the response's body
-                    Document document = Jsoup.parse(new String(responseBody));
+                    // Get the 'a' tag representing the link to the actual forum
+                    Elements links = section.select("div > h2 > span > a");
 
-                    // Filter out the forums: Title => (Title => URL) map
-                    Elements forumData = document.select("ol#forums").select("li");
-                    Map<String, Map<String, String>> forums = new LinkedHashMap<>();
+                    if (links.size() > 0) {
 
-                    // Loop through all forums
-                    // (General, User Content and Development, Source.Python Development)
-                    for (Element forum : forumData) {
+                        // Create a new ArrayList to hold ForumItem objects
+                        forumItems = new ArrayList<>();
 
-                        // Get the 'a' tag representing the link to the actual forum
-                        Element link = forum.select("div > h2 > span > a").first();
+                        Element sectionLink = links.first();
 
                         // Store its title
-                        String title = link.text();
+                        String title = sectionLink.text();
 
-                        // Filter out the sub forums (Title => URL) map
-                        Map<String, String> subForums = new LinkedHashMap<>();
-                        Elements subForumsList = forum.select("ol > li");
+                        // Filter out the forum's sub forums
+                        Elements subForums = section.select("ol > li");
+                        Elements forumLinks = subForums.select("h2.forumtitle > a");
+                        Elements forumDescriptions = subForums.select("p.forumdescription");
 
-                        // Loop through all sub forums of this forum
-                        for (Element subForum : subForumsList) {
+                        // Loop through them
+                        for (int i = 0; i < forumLinks.size(); i++) {
 
-                            // Dig deep...
-                            Elements sub = subForum.select("div > div > div > div > div");
+                            // Get the 'a' tag representing the link to the sub forum
+                            Element link = forumLinks.get(i);
 
-                            // Get the 'a' tag representing the actual sub forum
-                            Element subLink = sub.select("h2 > a").first();
+                            // And the 'p' tag representing the forum's description
+                            Element description = forumDescriptions.get(i);
 
-                            // TODO: This paragraph explains the forum, show it somewhere...
-                            //Element subParagraph = sub.select("p").first();
-                            //String subParagraphText = subParagraph.text();
-
-                            // Store its title and URL
-                            String subLinkTitle = subLink.text();
-                            String subLinkHref = subLink.attr("href");
-
-                            // Map the title to the URL
-                            subForums.put(subLinkTitle, subLinkHref);
+                            // Add a new ForumItem object to the list
+                            forumItems.add(new ForumsContent.ForumItem(
+                                    link.text(), description.text(), link.attr("href")
+                            ));
                         }
 
-                        // Map the title to the sub forum map
-                        forums.put(title, subForums);
+                        // Map the generated list to the forum title
+                        ForumsContent.ITEMS.put(title, forumItems);
                     }
-
-                    // Fill the PagerAdapter using the generated map
-                    fillAdapter(forums);
                 }
 
-                @Override
-                public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error) {
+                // Set the ViewPager's adapter to view the items
+                mPager.setAdapter(new ForumsAdapter(getSupportFragmentManager()));
 
-                    // If there was an error, dismiss the dialog
-                    showProgress(false, R.string.progress_checking_session);
-                }
-            });
-        }
-    }
-
-    private void fillAdapter(Map<String, Map<String, String>> forums) {
-
-        // Create a temporary ArrayList object to hold ForumItem objects
-        ArrayList<ForumsContent.ForumItem> items;
-
-        // Loop through the map...
-        for (String title : forums.keySet()) {
-
-            // Create a new ArrayList for this title
-            items = new ArrayList<>();
-
-            // Get the sub forum map
-            Map<String, String> forum = forums.get(title);
-
-            // Loop through it...
-            for (String subTitle : forum.keySet()) {
-
-                // Add ForumItem objects to the map
-                items.add(new ForumsContent.ForumItem(subTitle, forum.get(subTitle)));
+                // And dismuss the 'Loading forums...' dialog
+                mProgressLoadingForums.dismiss();
             }
 
-            // Map the title to the generated ArrayList
-            ForumsContent.ITEMS.put(title, items);
-        }
+            @Override
+            public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error) {
 
-        // Set the PagerAdapter (now, because we have items added to ForumsContent.ITEMS)
-        mPager.setAdapter(mPagerAdapter);
-
-        // Dismiss the dialog
-        showProgress(false, R.string.progress_checking_session);
-    }
-
-    // TODO: need to change this...
-    public void showProgress(boolean state, int textId) {
-        if (state) {
-            if (mProgressDialog != null) {
-                mProgressDialog.dismiss();
+                // If there was an error, dismiss the dialog
+                mProgressLoadingForums.dismiss();
             }
-
-            mProgressDialog = ProgressDialog.show(
-                    this,
-                    getString(R.string.progress_please_wait),
-                    getString(textId),
-                    true
-            );
-        } else if (mProgressDialog != null) {
-            mProgressDialog.dismiss();
-        }
+        });
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
+    public boolean onCreateOptionsMenu(final Menu menu) {
+
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
-    }
+        mMenu = menu;
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
+        // Store menu items
+        final MenuItem login = menu.getItem(0);
+        final MenuItem logout = menu.getItem(1);
 
-        // Get the clicked item's ID
-        int id = item.getItemId();
+        // Handle their state
+        login.setEnabled(true);
+        logout.setEnabled(false);
 
-        // Did we hit the 'Logout' item?
-        if (id == R.id.action_logout) {
+        // Have any cookies been saved?
+        if (mCookieStore.getCookies().size() > 0) {
 
-            // If yes, create an asynchronous HTTP client
+            // Store an instance of SharedPreferences
+            SharedPreferences preferences = getSharedPreferences("SP_CREDS", MODE_PRIVATE);
+            final String username = preferences.getString("username", null);
+            final String password = preferences.getString("password", null);
+
+            // Create an asynchronous HTTP client
             AsyncHttpClient client = new AsyncHttpClient();
 
             // Make it use our cookie store
             client.setCookieStore(mCookieStore);
 
-            // Create the query string ?do=logout
+            client.get(FORUMS_HOME, new AsyncHttpResponseHandler() {
+                @Override
+                public void onSuccess(int statusCode, Header[] headers, byte[] responseBody) {
+                    // Soup the response's body
+                    Document document = Jsoup.parse(new String(responseBody));
+
+                    // Are there any links to 'register.php'?
+                    if (document.select("a[href=register.php]").size() < 1) {
+
+                        // If not, disable the 'Login' item
+                        login.setEnabled(false);
+
+                        // And enable the 'Logout' button
+                        logout.setEnabled(true);
+
+                        if (username != null) {
+                            logout.setTitle(String.format(
+                                            "%s: %s",
+                                            getString(R.string.action_logout), username)
+                            );
+                        }
+                    } else {
+
+                        // Session expired; do re-login
+                        if (username != null && password != null) {
+
+                        }
+                    }
+                }
+
+                @Override
+                public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error) {
+                }
+            });
+        }
+
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(final MenuItem item) {
+
+        // Get the clicked item's ID
+        int id = item.getItemId();
+
+        if (id == R.id.action_login) {
+
+            // If we hit the 'Login' item, start the LoginActivity
+            Intent intent = new Intent(MainActivity.this, LoginActivity.class);
+            startActivity(intent);
+
+        } else if (id == R.id.action_logout) {
+
+            // If we hit the 'Logout' item, create the query string ?do=logout
             RequestParams params = new RequestParams();
             params.put("do", "logout");
 
+            // Create an asynchronous HTTP client
+            AsyncHttpClient client = new AsyncHttpClient();
+
+            // Make it use our cookie store
+            client.setCookieStore(mCookieStore);
+
             // Show the progress dialog
-            showProgress(true, R.string.progress_logging_out);
+            mProgressLogout.show();
 
             // GET request to http://forums.sourcepython.com/login.php
             client.get(FORUMS_LOGIN, params, new AsyncHttpResponseHandler() {
@@ -264,19 +270,20 @@ public class MainActivity extends AppCompatActivity implements
                     // If it was successful, clear the cookie store
                     mCookieStore.clear();
 
-                    // Dismiss the progress dialog
-                    showProgress(false, R.string.progress_checking_session);
+                    // Disable 'Logout' and enable 'Login'
+                    item.setEnabled(false);
+                    item.setTitle(getString(R.string.action_logout));
+                    mMenu.getItem(0).setEnabled(true);
 
-                    // Start the LoginActivity
-                    Intent intent = new Intent(MainActivity.this, LoginActivity.class);
-                    startActivity(intent);
+                    // Dismiss the progress dialog
+                    mProgressLogout.dismiss();
                 }
 
                 @Override
                 public void onFailure(int statusCode, Header[] headers, byte[] responseBody, Throwable error) {
 
                     // If it failed, dismiss the progress dialog
-                    showProgress(false, R.string.progress_checking_session);
+                    mProgressLogout.dismiss();
 
                     // And log the error message
                     Log.d("FAIL", error.getMessage());
@@ -329,7 +336,7 @@ public class MainActivity extends AppCompatActivity implements
                     new String[ForumsContent.ITEMS.size()]
             );
 
-            // Return the title at the position given
+            // Return the title at the given position
             return items[position];
         }
     }
